@@ -1,0 +1,81 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id         String   @id @default(cuid())
+  githubId   String   @unique
+  email      String?  @unique
+  name       String?
+  avatarUrl  String?
+  createdAt  DateTime @default(now())
+  memberships OrgMember[]
+  auditLogs  AuditLog[] @relation("AuditUser")
+}
+
+model Organization {
+  id        String     @id @default(cuid())
+  name      String
+  slug      String     @unique
+  createdAt DateTime   @default(now())
+  members   OrgMember[]
+  projects  Project[]
+  auditLogs AuditLog[] @relation("AuditOrg")
+}
+
+model OrgMember {
+  id      String   @id @default(cuid())
+  org     Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId   String
+  user    User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId  String
+  role    Role
+  @@unique([orgId, userId])
+}
+
+enum Role {
+  OWNER
+  MAINTAINER
+  DEVELOPER
+  VIEWER
+}
+
+model Project {
+  id            String   @id @default(cuid())
+  org           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  orgId         String
+  name          String
+  repoFullName  String   // e.g. user/repo
+  defaultBranch String   @default("main")
+  createdAt     DateTime @default(now())
+  auditLogs     AuditLog[] @relation("AuditProject")
+}
+
+model WebhookEvent {
+  id         String   @id @default(cuid())
+  provider   String
+  eventType  String
+  payloadJson Json
+  receivedAt DateTime @default(now())
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actor      User?    @relation("AuditUser", fields: [actorUserId], references: [id])
+  actorUserId String?
+  org        Organization? @relation("AuditOrg", fields: [orgId], references: [id])
+  orgId      String?
+  project    Project? @relation("AuditProject", fields: [projectId], references: [id])
+  projectId  String?
+  action     String
+  metadataJson Json?
+  createdAt  DateTime @default(now())
+}
