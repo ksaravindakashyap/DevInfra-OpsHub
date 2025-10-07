@@ -1,0 +1,11 @@
+# Copy this file to docker-compose.override.yml and customize for your environment
+# This file is ignored by git and allows you to override default values
+
+version: '3.8'
+
+services:
+  postgres:
+    environment:
+      POSTGRES_PASSWORD: your_secure_password_here
+      POSTGRES_USER: your_username_here
+      POSTGRES_DB: your_database_name_here

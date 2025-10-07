@@ -7,6 +7,8 @@ import { ProjectsModule } from './projects/projects.module';
 import { AuditModule } from './audit/audit.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
+import { QueueModule } from './queue/queue.module';
+import { SlackModule } from './slack/slack.module';
 
 @Module({
   imports: [
@@ -20,6 +22,8 @@ import { WebhooksModule } from './webhooks/webhooks.module';
     ProjectsModule,
     AuditModule,
     WebhooksModule,
+    QueueModule,
+    SlackModule,
   ],
 })
 export class AppModule {}

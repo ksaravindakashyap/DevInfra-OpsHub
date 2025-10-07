@@ -39,6 +39,7 @@ export const api = {
   
   // Projects
   getProject: (id: string) => apiRequest<any>(`/projects/${id}`),
+  getDeployments: (id: string) => apiRequest<any[]>(`/projects/${id}/deployments`),
   createProject: (orgId: string, data: { name: string; repoFullName: string; defaultBranch?: string }) => 
     apiRequest<any>(`/orgs/${orgId}/projects`, {
       method: 'POST',

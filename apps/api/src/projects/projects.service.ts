@@ -1,7 +1,9 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
-import { Role } from '@prisma/client';
+import { Role, Provider } from '@prisma/client';
+import { ConfigureProviderDto } from './dto/configure-provider.dto';
+import { ConfigureSlackDto } from './dto/configure-slack.dto';
 
 @Injectable()
 export class ProjectsService {
@@ -74,5 +76,90 @@ export class ProjectsService {
     }
 
     return project;
+  }
+
+  async getDeployments(projectId: string, userId: string) {
+    // Verify user has access to the project
+    const project = await this.findById(projectId, userId);
+    
+    return this.prisma.previewDeployment.findMany({
+      where: { projectId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async configureProvider(projectId: string, config: ConfigureProviderDto, userId: string) {
+    // Verify user has access to the project
+    await this.findById(projectId, userId);
+
+    const providerConfig = await this.prisma.providerConfig.upsert({
+      where: { projectId },
+      update: {
+        provider: config.provider,
+        vercelProjectId: config.vercelProjectId,
+        vercelToken: config.vercelToken,
+        netlifySiteId: config.netlifySiteId,
+        netlifyToken: config.netlifyToken,
+      },
+      create: {
+        projectId,
+        provider: config.provider,
+        vercelProjectId: config.vercelProjectId,
+        vercelToken: config.vercelToken,
+        netlifySiteId: config.netlifySiteId,
+        netlifyToken: config.netlifyToken,
+      },
+    });
+
+    // Log the configuration change
+    await this.auditService.log({
+      actorUserId: userId,
+      projectId,
+      action: 'project.provider.config.updated',
+      metadataJson: {
+        provider: config.provider,
+        vercelProjectId: config.vercelProjectId,
+        // Don't log tokens for security
+      },
+    });
+
+    return providerConfig;
+  }
+
+  async configureSlack(projectId: string, config: ConfigureSlackDto, userId: string) {
+    // Verify user has access to the project
+    await this.findById(projectId, userId);
+
+    const notificationChannel = await this.prisma.notificationChannel.upsert({
+      where: {
+        projectId_type: {
+          projectId,
+          type: 'SLACK',
+        },
+      },
+      update: {
+        slackBotToken: config.botToken,
+        slackChannel: config.channel,
+      },
+      create: {
+        projectId,
+        type: 'SLACK',
+        slackBotToken: config.botToken,
+        slackChannel: config.channel,
+      },
+    });
+
+    // Log the configuration change
+    await this.auditService.log({
+      actorUserId: userId,
+      projectId,
+      action: 'project.notifications.slack.updated',
+      metadataJson: {
+        channel: config.channel,
+        // Don't log tokens for security
+      },
+    });
+
+    return notificationChannel;
   }
 }

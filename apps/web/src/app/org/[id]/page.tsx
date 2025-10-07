@@ -222,7 +222,8 @@ export default function OrgPage({ params }: { params: { id: string } }) {
               {org.projects.map((project) => (
                 <div
                   key={project.id}
-                  className="border rounded-lg p-6 hover:shadow-md transition-shadow"
+                  className="border rounded-lg p-6 hover:shadow-md transition-shadow cursor-pointer"
+                  onClick={() => router.push(`/projects/${project.id}`)}
                 >
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-medium text-foreground">{project.name}</h3>

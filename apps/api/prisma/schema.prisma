@@ -57,6 +57,9 @@ model Project {
   defaultBranch String   @default("main")
   createdAt     DateTime @default(now())
   auditLogs     AuditLog[] @relation("AuditProject")
+  providerConfig ProviderConfig?
+  deployments   PreviewDeployment[]
+  notifications NotificationChannel[]
 }
 
 model WebhookEvent {
@@ -78,4 +81,65 @@ model AuditLog {
   action     String
   metadataJson Json?
   createdAt  DateTime @default(now())
+}
+
+enum Provider {
+  VERCEL
+  NETLIFY
+  MOCK
+}
+
+enum DeploymentStatus {
+  QUEUED
+  BUILDING
+  READY
+  ERROR
+  DESTROYED
+}
+
+model ProviderConfig {
+  id               String   @id @default(cuid())
+  project          Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId        String   @unique
+  provider         Provider
+  // Vercel-specific
+  vercelProjectId  String?
+  vercelToken      String?
+  // Netlify-specific (optional for later)
+  netlifySiteId    String?
+  netlifyToken     String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model PreviewDeployment {
+  id                    String   @id @default(cuid())
+  project               Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId             String
+  prNumber              Int
+  branch                String
+  provider              Provider
+  providerDeploymentId  String?
+  url                   String?
+  status                DeploymentStatus @default(QUEUED)
+  metadata              Json?
+  createdAt             DateTime @default(now())
+  destroyedAt           DateTime?
+  @@unique([projectId, prNumber])
+}
+
+enum NotificationType {
+  SLACK
+  WEBHOOK
+}
+
+model NotificationChannel {
+  id            String   @id @default(cuid())
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId     String
+  type          NotificationType
+  slackBotToken String?
+  slackChannel  String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }

@@ -40,13 +40,20 @@ A GitOps control plane for managing preview environments, built with TypeScript,
 2. **Set up environment variables:**
    ```bash
    cp .env.example .env
+   cp docker-compose.override.yml.example docker-compose.override.yml
    ```
    
-   Edit `.env` and add your GitHub OAuth credentials:
+   Edit `.env` and add your credentials:
    ```env
+   # Database credentials (for Docker Compose)
+   POSTGRES_PASSWORD=your_secure_password_here
+   
+   # GitHub OAuth
    GITHUB_CLIENT_ID=your_github_client_id
    GITHUB_CLIENT_SECRET=your_github_client_secret
    ```
+   
+   **⚠️ Security Note**: Change the default PostgreSQL password in `docker-compose.override.yml` for production use.
 
 3. **Generate encryption key:**
    ```bash
@@ -162,6 +169,28 @@ This is Day 1-2 implementation. Future features will include:
 - Advanced RBAC with project-level permissions
 - OpenTelemetry observability
 
+## Security Considerations
+
+### Development Environment
+- **Default credentials** are used for local development only
+- **Change passwords** in `docker-compose.override.yml` for any shared environment
+- **Never commit** `.env` or `docker-compose.override.yml` files
+
+### Production Deployment
+- Use **strong, unique passwords** for all services
+- Enable **SSL/TLS** for database connections
+- Use **secrets management** (e.g., Docker Secrets, Kubernetes Secrets)
+- Regularly **rotate credentials** and API keys
+- Monitor **audit logs** for suspicious activity
+
+### Environment Variables
+```bash
+# Generate secure passwords
+openssl rand -base64 32  # For POSTGRES_PASSWORD
+openssl rand -base64 32  # For JWT_SECRET
+openssl rand -base64 32  # For GITHUB_WEBHOOK_SECRET
+```
+
 ## Contributing
 
 1. Fork the repository
@@ -172,4 +201,4 @@ This is Day 1-2 implementation. Future features will include:
 
 ## License
 
-MIT License - see LICENSE file for details.
+All rights reserved.

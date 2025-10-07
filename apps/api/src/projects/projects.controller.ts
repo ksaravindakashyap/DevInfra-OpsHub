@@ -5,6 +5,8 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { ProjectsService } from './projects.service';
 import { CreateProjectDto } from './dto/create-project.dto';
+import { ConfigureProviderDto } from './dto/configure-provider.dto';
+import { ConfigureSlackDto } from './dto/configure-slack.dto';
 import { Role } from '@prisma/client';
 
 @Controller('projects')
@@ -15,6 +17,33 @@ export class ProjectsController {
   @Get(':id')
   async getProject(@Param('id') id: string, @CurrentUser() user: any) {
     return this.projectsService.findById(id, user.userId);
+  }
+
+  @Get(':id/deployments')
+  async getDeployments(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.projectsService.getDeployments(id, user.userId);
+  }
+
+  @Post(':id/provider')
+  @UseGuards(RbacGuard)
+  @Roles(Role.MAINTAINER, Role.OWNER)
+  async configureProvider(
+    @Param('id') id: string,
+    @Body() configureProviderDto: ConfigureProviderDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.projectsService.configureProvider(id, configureProviderDto, user.userId);
+  }
+
+  @Post(':id/slack')
+  @UseGuards(RbacGuard)
+  @Roles(Role.MAINTAINER, Role.OWNER)
+  async configureSlack(
+    @Param('id') id: string,
+    @Body() configureSlackDto: ConfigureSlackDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.projectsService.configureSlack(id, configureSlackDto, user.userId);
   }
 }
 
