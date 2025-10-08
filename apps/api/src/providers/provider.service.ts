@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { VercelProvider } from './vercel.provider';
+import { MockProvider } from './mock.provider';
 import { PreviewProvider } from './provider.interface';
 import { Provider, ProviderConfig } from '@prisma/client';
 
@@ -7,7 +8,10 @@ import { Provider, ProviderConfig } from '@prisma/client';
 export class ProviderService {
   private readonly logger = new Logger(ProviderService.name);
 
-  constructor(private vercelProvider: VercelProvider) {}
+  constructor(
+    private vercelProvider: VercelProvider,
+    private mockProvider: MockProvider,
+  ) {}
 
   async createPreview(input: {
     projectId: string;
@@ -15,8 +19,9 @@ export class ProviderService {
     branch: string;
     provider: Provider;
     config: ProviderConfig;
+    env?: Record<string, string>;
   }) {
-    const { repoFullName, branch, provider, config } = input;
+    const { repoFullName, branch, provider, config, env } = input;
 
     const providerInstance = this.getProvider(provider);
     
@@ -26,6 +31,7 @@ export class ProviderService {
         branch,
         vercelToken: config.vercelToken!,
         vercelProjectId: config.vercelProjectId!,
+        env: env || {},
       });
     }
 
@@ -49,6 +55,11 @@ export class ProviderService {
   }
 
   private getProvider(provider: Provider): PreviewProvider {
+    // Use mock provider in test mode
+    if (process.env.USE_MOCK_PROVIDER === '1') {
+      return this.mockProvider;
+    }
+
     switch (provider) {
       case Provider.VERCEL:
         return this.vercelProvider;

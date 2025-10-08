@@ -1,0 +1,66 @@
+services:
+  - type: web
+    name: opshub-api
+    env: docker
+    repo: https://github.com/YOUR_USERNAME/YOUR_REPO
+    rootDir: apps/api
+    plan: starter
+    dockerfilePath: ./apps/api/Dockerfile
+    envVars:
+      - key: DATABASE_URL
+        fromService:
+          name: opshub-db
+          type: pserv
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: opshub-redis
+          type: redis
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ENCRYPTION_KEY_BASE64
+        generateValue: true
+      - key: API_BASE_URL
+        value: https://opshub-api.onrender.com
+      - key: WEB_BASE_URL
+        value: https://opshub-web.onrender.com
+      - key: NODE_ENV
+        value: production
+      - key: GITHUB_CLIENT_ID
+        sync: false
+      - key: GITHUB_CLIENT_SECRET
+        sync: false
+      - key: GITHUB_WEBHOOK_SECRET
+        generateValue: true
+
+  - type: web
+    name: opshub-web
+    env: docker
+    repo: https://github.com/YOUR_USERNAME/YOUR_REPO
+    rootDir: apps/web
+    plan: starter
+    dockerfilePath: ./apps/web/Dockerfile
+    envVars:
+      - key: NEXT_PUBLIC_API_BASE_URL
+        value: https://opshub-api.onrender.com
+      - key: NODE_ENV
+        value: production
+
+  - type: pserv
+    name: opshub-db
+    env: docker
+    plan: starter
+    dockerCommand: >
+      docker run -e POSTGRES_PASSWORD=postgres 
+      -e POSTGRES_USER=postgres 
+      -e POSTGRES_DB=opshub 
+      -p 5432 postgres:15
+    disk:
+      name: data
+      mountPath: /var/lib/postgresql/data
+      sizeGB: 10
+
+  - type: redis
+    name: opshub-redis
+    plan: starter

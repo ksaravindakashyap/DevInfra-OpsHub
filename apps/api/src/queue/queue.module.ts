@@ -3,6 +3,15 @@ import { BullModule } from '@nestjs/bullmq';
 import { QueueService } from './queue.service';
 import { DeploymentProcessor } from './deployment.processor';
 import { SlackProcessor } from './slack.processor';
+import { PrismaModule } from '../prisma/prisma.module';
+import { ProviderService } from '../providers/provider.service';
+import { SlackService } from '../slack/slack.service';
+import { AuditModule } from '../audit/audit.module';
+import { EnvVarsService } from '../environments/env-vars.service';
+import { CryptoModule } from '../crypto/crypto.module';
+import { HealthProbeService } from '../health/health-probe.service';
+import { HealthService } from '../health/health.service';
+import { DeployEventsService } from '../analytics/deploy-events.service';
 
 @Module({
   imports: [
@@ -15,8 +24,21 @@ import { SlackProcessor } from './slack.processor';
     BullModule.registerQueue({
       name: 'preview-queue',
     }),
+    PrismaModule,
+    AuditModule,
+    CryptoModule,
   ],
-  providers: [QueueService, DeploymentProcessor, SlackProcessor],
+  providers: [
+    QueueService,
+    DeploymentProcessor,
+    SlackProcessor,
+    ProviderService,
+    SlackService,
+    EnvVarsService,
+    HealthProbeService,
+    HealthService,
+    DeployEventsService,
+  ],
   exports: [QueueService],
 })
 export class QueueModule {}

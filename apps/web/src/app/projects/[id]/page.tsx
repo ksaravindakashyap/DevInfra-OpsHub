@@ -36,7 +36,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   const [deployments, setDeployments] = useState<Deployment[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'deployments' | 'settings'>('deployments')
+  const [activeTab, setActiveTab] = useState<'deployments' | 'environments' | 'health' | 'analytics' | 'settings'>('deployments')
   const [copied, setCopied] = useState(false)
 
   useEffect(() => {
@@ -135,6 +135,39 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                 Deployments
               </button>
               <button
+                onClick={() => setActiveTab('environments')}
+                className={`px-4 py-2 rounded-md ${
+                  activeTab === 'environments'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                }`}
+              >
+                <Building2 className="h-4 w-4 mr-2 inline" />
+                Environments
+              </button>
+              <button
+                onClick={() => setActiveTab('health')}
+                className={`px-4 py-2 rounded-md ${
+                  activeTab === 'health'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                }`}
+              >
+                <Activity className="h-4 w-4 mr-2 inline" />
+                Health
+              </button>
+              <button
+                onClick={() => setActiveTab('analytics')}
+                className={`px-4 py-2 rounded-md ${
+                  activeTab === 'analytics'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                }`}
+              >
+                <BarChart3 className="h-4 w-4 mr-2 inline" />
+                Analytics
+              </button>
+              <button
                 onClick={() => setActiveTab('settings')}
                 className={`px-4 py-2 rounded-md ${
                   activeTab === 'settings'
@@ -223,6 +256,74 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                 </table>
               </div>
             )}
+          </div>
+        )}
+
+        {activeTab === 'environments' && (
+          <div>
+            <h2 className="text-xl font-semibold text-foreground mb-4">Environment Variables</h2>
+            <div className="text-center py-12">
+              <Building2 className="mx-auto h-12 w-12 text-muted-foreground" />
+              <h3 className="mt-2 text-sm font-medium text-foreground">Environment Management</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Environment variables and secret management will be available in the next update.
+              </p>
+              <div className="mt-4 text-sm text-muted-foreground">
+                <p>Features coming soon:</p>
+                <ul className="list-disc list-inside mt-2 space-y-1">
+                  <li>Encrypted environment variable storage</li>
+                  <li>Secret rotation policies</li>
+                  <li>Environment-specific configurations (Preview/Staging/Production)</li>
+                  <li>Automatic injection into preview deployments</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'health' && (
+          <div>
+            <h2 className="text-xl font-semibold text-foreground mb-4">Health Monitoring</h2>
+            <div className="text-center py-12">
+              <Activity className="mx-auto h-12 w-12 text-muted-foreground" />
+              <h3 className="mt-2 text-sm font-medium text-foreground">Health Monitoring</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Health checks and monitoring will be available in the next update.
+              </p>
+              <div className="mt-4 text-sm text-muted-foreground">
+                <p>Features coming soon:</p>
+                <ul className="list-disc list-inside mt-2 space-y-1">
+                  <li>Automated health checks for preview deployments</li>
+                  <li>Latency monitoring and uptime tracking</li>
+                  <li>Slack alerts for degraded services</li>
+                  <li>Performance charts and analytics</li>
+                  <li>Custom health check endpoints</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'analytics' && (
+          <div>
+            <h2 className="text-xl font-semibold text-foreground mb-4">Deploy Analytics</h2>
+            <div className="text-center py-12">
+              <BarChart3 className="mx-auto h-12 w-12 text-muted-foreground" />
+              <h3 className="mt-2 text-sm font-medium text-foreground">Deploy Analytics</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Performance metrics and analytics will be available in the next update.
+              </p>
+              <div className="mt-4 text-sm text-muted-foreground">
+                <p>Features coming soon:</p>
+                <ul className="list-disc list-inside mt-2 space-y-1">
+                  <li>Success rate tracking and P95 create times</li>
+                  <li>Error taxonomy and failure analysis</li>
+                  <li>Performance charts and time-series data</li>
+                  <li>Weekly digest reports via Slack</li>
+                  <li>Deployment lifecycle event tracking</li>
+                </ul>
+              </div>
+            </div>
           </div>
         )}
 

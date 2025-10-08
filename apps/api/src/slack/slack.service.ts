@@ -13,6 +13,12 @@ export class SlackService {
   constructor(private prisma: PrismaService) {}
 
   async notifyProject(projectId: string, notification: SlackNotification) {
+    // Skip Slack notifications in test mode
+    if (process.env.DISABLE_SLACK === '1') {
+      this.logger.log(`[TEST] Slack notification skipped for project ${projectId}: ${notification.message}`);
+      return;
+    }
+
     try {
       // Find Slack notification channel for this project
       const channel = await this.prisma.notificationChannel.findFirst({

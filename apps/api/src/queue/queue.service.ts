@@ -19,6 +19,12 @@ export interface SlackNotifyJob {
   level: 'info' | 'success' | 'warning' | 'error';
 }
 
+export interface HealthProbeJob {
+  healthCheckId: string;
+  projectId: string;
+  immediate?: boolean;
+}
+
 @Injectable()
 export class QueueService {
   constructor(
@@ -54,5 +60,36 @@ export class QueueService {
         delay: 1000,
       },
     });
+  }
+
+  async enqueueHealthProbe(data: HealthProbeJob) {
+    const jobOptions = {
+      attempts: 3,
+      backoff: {
+        type: 'exponential',
+        delay: 2000,
+      },
+    };
+
+    if (data.immediate) {
+      // Run immediately
+      await this.previewQueue.add('health-probe', data, jobOptions);
+    } else {
+      // Register as repeatable job
+      const repeatOptions = {
+        every: 60000, // Default 60 seconds, will be overridden by intervalSec
+        jobId: `health-probe-${data.healthCheckId}`,
+      };
+      
+      await this.previewQueue.add('health-probe', data, {
+        ...jobOptions,
+        repeat: repeatOptions,
+      });
+    }
+  }
+
+  async removeHealthProbe(healthCheckId: string) {
+    const jobId = `health-probe-${healthCheckId}`;
+    await this.previewQueue.removeRepeatable('health-probe', { jobId });
   }
 }

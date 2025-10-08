@@ -5,7 +5,11 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ProviderService } from '../providers/provider.service';
 import { SlackService } from '../slack/slack.service';
 import { AuditService } from '../audit/audit.service';
-import { CreatePreviewJob, TearDownPreviewJob } from './queue.service';
+import { EnvVarsService } from '../environments/env-vars.service';
+import { HealthProbeService } from '../health/health-probe.service';
+import { HealthService } from '../health/health.service';
+import { DeployEventsService } from '../analytics/deploy-events.service';
+import { CreatePreviewJob, TearDownPreviewJob, HealthProbeJob } from './queue.service';
 
 @Processor('preview-queue')
 @Injectable()
@@ -17,6 +21,10 @@ export class DeploymentProcessor extends WorkerHost {
     private providerService: ProviderService,
     private slackService: SlackService,
     private auditService: AuditService,
+    private envVarsService: EnvVarsService,
+    private healthProbeService: HealthProbeService,
+    private healthService: HealthService,
+    private deployEventsService: DeployEventsService,
   ) {
     super();
   }
@@ -29,6 +37,8 @@ export class DeploymentProcessor extends WorkerHost {
         return this.handleCreatePreview(data as CreatePreviewJob);
       case 'tear-down-preview':
         return this.handleTearDownPreview(data as TearDownPreviewJob);
+      case 'health-probe':
+        return this.handleHealthProbe(data as HealthProbeJob);
       default:
         this.logger.warn(`Unknown job type: ${name}`);
     }
@@ -36,8 +46,18 @@ export class DeploymentProcessor extends WorkerHost {
 
   private async handleCreatePreview(data: CreatePreviewJob) {
     const { projectId, prNumber, branch } = data;
+    const attemptId = this.deployEventsService.generateAttemptId();
 
     try {
+      // Emit CREATE_REQUESTED event
+      await this.deployEventsService.emitCreateRequested(
+        projectId,
+        prNumber,
+        branch,
+        'VERCEL', // Will be updated with actual provider
+        attemptId
+      );
+
       // Upsert preview deployment
       const deployment = await this.prisma.previewDeployment.upsert({
         where: {
@@ -65,6 +85,15 @@ export class DeploymentProcessor extends WorkerHost {
       });
 
       if (!project?.providerConfig) {
+        await this.deployEventsService.emitError(
+          projectId,
+          prNumber,
+          branch,
+          'VERCEL',
+          attemptId,
+          { message: 'Missing provider configuration' }
+        );
+
         await this.prisma.previewDeployment.update({
           where: { id: deployment.id },
           data: { status: 'ERROR' },
@@ -85,20 +114,60 @@ export class DeploymentProcessor extends WorkerHost {
         return;
       }
 
+      // Emit CREATE_STARTED event
+      await this.deployEventsService.emitCreateStarted(
+        projectId,
+        prNumber,
+        branch,
+        project.providerConfig.provider,
+        attemptId
+      );
+
       // Update status to building
       await this.prisma.previewDeployment.update({
         where: { id: deployment.id },
         data: { status: 'BUILDING' },
       });
 
+      // Emit PROVIDER_BUILDING event
+      await this.deployEventsService.emitProviderBuilding(
+        projectId,
+        prNumber,
+        branch,
+        project.providerConfig.provider,
+        attemptId
+      );
+
+      // Get preview environment variables
+      const previewEnvironment = await this.prisma.environment.findUnique({
+        where: {
+          projectId_type: {
+            projectId,
+            type: 'PREVIEW',
+          },
+        },
+      });
+
+      let envVars = {};
+      if (previewEnvironment) {
+        try {
+          envVars = await this.envVarsService.getDecryptedMap(previewEnvironment.id);
+        } catch (error) {
+          this.logger.warn('Failed to load environment variables for preview', error);
+        }
+      }
+
       // Create preview deployment
+      const startTime = Date.now();
       const result = await this.providerService.createPreview({
         projectId,
         repoFullName: project.repoFullName,
         branch,
         provider: project.providerConfig.provider,
         config: project.providerConfig,
+        env: envVars,
       });
+      const durationMs = Date.now() - startTime;
 
       // Update with results
       await this.prisma.previewDeployment.update({
@@ -110,6 +179,26 @@ export class DeploymentProcessor extends WorkerHost {
           metadata: result.metadata,
         },
       });
+
+      // Emit READY event with duration
+      await this.deployEventsService.emitReady(
+        projectId,
+        prNumber,
+        branch,
+        project.providerConfig.provider,
+        attemptId,
+        durationMs,
+        { url: result.url, deploymentId: result.deploymentId }
+      );
+
+      // Auto-create health check for preview
+      if (result.url) {
+        try {
+          await this.healthService.createForPreview(projectId, prNumber, result.url);
+        } catch (error) {
+          this.logger.warn('Failed to create health check for preview', error);
+        }
+      }
 
       // Send success notification
       await this.slackService.notifyProject(projectId, {
@@ -126,6 +215,16 @@ export class DeploymentProcessor extends WorkerHost {
 
     } catch (error) {
       this.logger.error('Failed to create preview deployment', error);
+
+      // Emit ERROR event
+      await this.deployEventsService.emitError(
+        projectId,
+        prNumber,
+        branch,
+        'VERCEL', // Will be updated with actual provider
+        attemptId,
+        error
+      );
 
       await this.prisma.previewDeployment.update({
         where: {
@@ -153,8 +252,18 @@ export class DeploymentProcessor extends WorkerHost {
 
   private async handleTearDownPreview(data: TearDownPreviewJob) {
     const { projectId, prNumber } = data;
+    const attemptId = this.deployEventsService.generateAttemptId();
 
     try {
+      // Emit TEARDOWN_REQUESTED event
+      await this.deployEventsService.emitTeardownRequested(
+        projectId,
+        prNumber,
+        'main', // Default branch
+        'VERCEL', // Will be updated with actual provider
+        attemptId
+      );
+
       const deployment = await this.prisma.previewDeployment.findUnique({
         where: {
           projectId_prNumber: {
@@ -192,6 +301,22 @@ export class DeploymentProcessor extends WorkerHost {
         },
       });
 
+      // Disable health check for preview
+      try {
+        await this.healthService.disableForPreview(projectId, prNumber);
+      } catch (error) {
+        this.logger.warn('Failed to disable health check for preview', error);
+      }
+
+      // Emit TEARDOWN_DONE event
+      await this.deployEventsService.emitTeardownDone(
+        projectId,
+        prNumber,
+        deployment.branch,
+        'VERCEL', // Will be updated with actual provider
+        attemptId
+      );
+
       // Send notification
       await this.slackService.notifyProject(projectId, {
         message: `🗑️ Preview destroyed for PR #${prNumber}`,
@@ -219,6 +344,16 @@ export class DeploymentProcessor extends WorkerHost {
         action: 'deploy.preview.destroy.failed',
         metadataJson: { prNumber, error: error.message },
       });
+    }
+  }
+
+  private async handleHealthProbe(data: HealthProbeJob) {
+    const { healthCheckId } = data;
+
+    try {
+      await this.healthProbeService.probeHealthCheck(healthCheckId);
+    } catch (error) {
+      this.logger.error(`Health probe failed for ${healthCheckId}`, error);
     }
   }
 }

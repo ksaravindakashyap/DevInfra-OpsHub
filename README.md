@@ -1,204 +1,256 @@
-# DevInfra OpsHub
+# DevInfra OpsHub — GitOps Control Plane
 
-A GitOps control plane for managing preview environments, built with TypeScript, NestJS, Next.js, and PostgreSQL.
+Turn **GitHub PRs** into **per-PR preview environments** (Vercel/Netlify), manage **encrypted env vars + rotation**, track **health/uptime**, and get **Slack** alerts — with deploy analytics (**success rate, P95 create time, error taxonomy**).
 
-## Features
+[![CI](https://img.shields.io/badge/CI-GitHub_Actions-blue)](#) [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](#) [![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?logo=typescript&logoColor=white)](#)
 
-- **GitHub OAuth Authentication** - Secure login with GitHub accounts
-- **Role-Based Access Control (RBAC)** - Owner, Maintainer, Developer, Viewer roles
-- **Organization Management** - Create and manage organizations
-- **Project Management** - Link GitHub repositories to projects
-- **Audit Logging** - Track all actions and changes
-- **Webhook Support** - Handle GitHub webhook events
+## ✨ Features
 
-## Tech Stack
+- **🚀 Per-PR Previews**: Automatic create/teardown via GitHub webhooks → Vercel/Netlify
+- **🔐 Secrets & Rotation**: AES-256-GCM encryption at rest, versioning, automated rotation policies
+- **💚 Health Monitoring**: OK/DEGRADED state machine, Slack alerts with cooldown, auto-registration
+- **📊 Deploy Analytics**: Success rate, P50/P95/P99 metrics, error taxonomy, weekly digest
+- **👥 RBAC & Audit**: Organization/Project roles; comprehensive audit logging
+- **🔧 Provider Agnostic**: Extensible architecture supporting Vercel, Netlify, and custom providers
 
-- **Backend**: NestJS, Prisma, PostgreSQL, Redis
-- **Frontend**: Next.js 14, Tailwind CSS, TypeScript
-- **Database**: PostgreSQL with Prisma ORM
-- **Cache/Queue**: Redis (for future BullMQ integration)
-- **Authentication**: GitHub OAuth with JWT cookies
-- **Monorepo**: pnpm workspaces with Turbo
+## 🏗️ Architecture
 
-## Quick Start
+```mermaid
+flowchart LR
+  GH[GitHub Webhooks] --> API
+  UI[Next.js Web] --> API
+  API[NestJS API] --> Q[Redis/BullMQ]
+  Q --> Prov[Vercel/Netlify Provider]
+  API --> PG[(PostgreSQL)]
+  API --> Slack[Slack API]
+  HC[Health Probes] --> API
+```
+
+### Core Components
+
+- **Web App** (Next.js): React dashboard with TypeScript
+- **API** (NestJS): RESTful API with authentication, RBAC, and webhooks
+- **Queue** (BullMQ + Redis): Background job processing for deployments
+- **Database** (PostgreSQL): Primary data store with Prisma ORM
+- **Providers**: Vercel, Netlify, and mock providers for testing
+- **Monitoring**: Health checks, analytics, and Slack notifications
+
+## 🚀 Quickstart (Local)
 
 ### Prerequisites
 
 - Node.js 18+
-- pnpm
 - Docker & Docker Compose
+- pnpm
 
 ### Setup
 
-1. **Clone and install dependencies:**
-   ```bash
-   git clone <repository-url>
-   cd DevInfra-OpsHub
-   pnpm install
-   ```
+```bash
+# 1) Clone and install
+git clone <your-repo>
+cd DevInfra-OpsHub
+pnpm install
 
-2. **Set up environment variables:**
-   ```bash
-   cp .env.example .env
-   cp docker-compose.override.yml.example docker-compose.override.yml
-   ```
-   
-   Edit `.env` and add your credentials:
-   ```env
-   # Database credentials (for Docker Compose)
-   POSTGRES_PASSWORD=your_secure_password_here
-   
-   # GitHub OAuth
-   GITHUB_CLIENT_ID=your_github_client_id
-   GITHUB_CLIENT_SECRET=your_github_client_secret
-   ```
-   
-   **⚠️ Security Note**: Change the default PostgreSQL password in `docker-compose.override.yml` for production use.
+# 2) Environment setup
+cp deploy/env.example .env
+# Edit .env with your GitHub OAuth credentials
 
-3. **Generate encryption key:**
-   ```bash
-   openssl rand -base64 32
-   ```
-   Add the output to `ENCRYPTION_KEY_BASE64` in your `.env` file.
+# 3) Start services
+docker compose -f deploy/docker-compose.prod.yml up -d
 
-4. **Start the development environment:**
-   ```bash
-   pnpm setup
-   pnpm dev
-   ```
+# 4) Database setup
+pnpm --filter @opshub/api prisma migrate dev
+pnpm --filter @opshub/api prisma db seed
 
-This will:
-- Start PostgreSQL and Redis with Docker Compose
-- Generate Prisma client
-- Push database schema
-- Seed with demo data
-- Start both API (port 4000) and web (port 3000) servers
+# 5) Start applications
+pnpm -w dev
 
-### GitHub OAuth Setup
+# 6) Visit the app
+open http://localhost:3000
+```
 
-1. Go to GitHub Settings > Developer settings > OAuth Apps
-2. Create a new OAuth App with:
-   - **Authorization callback URL**: `http://localhost:4000/auth/github/callback`
-   - **Homepage URL**: `http://localhost:3000`
-3. Copy the Client ID and Client Secret to your `.env` file
+### Test Login (Development)
 
-## Development
+For testing without GitHub OAuth:
 
-### Available Scripts
+```bash
+# Enable test login
+echo "ALLOW_TEST_LOGIN=1" >> .env
 
-- `pnpm dev` - Start all services in development mode
-- `pnpm build` - Build all applications
-- `pnpm lint` - Run ESLint on all code
-- `pnpm typecheck` - Run TypeScript type checking
-- `pnpm test` - Run tests
-- `pnpm db:generate` - Generate Prisma client
-- `pnpm db:push` - Push schema changes to database
-- `pnpm db:migrate` - Create and run database migrations
-- `pnpm db:seed` - Seed database with demo data
+# Login as demo user
+curl -X POST http://localhost:4000/test/login-as \
+  -H "Content-Type: application/json" \
+  -d '{"email": "owner@demo.local"}'
+```
+
+## 🌐 One-Click Deploy (Hosted)
+
+### Render Blueprint
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/blueprint/new)
+
+1. Click the "Deploy to Render" button above
+2. Connect your GitHub repository
+3. Configure environment variables (see `deploy/env.example`)
+4. Deploy with one click!
+
+### Manual Deploy
+
+See [docs/DEPLOY.md](docs/DEPLOY.md) for detailed deployment instructions.
+
+## 📖 Documentation
+
+- **[Architecture](docs/ARCHITECTURE.md)** - System design and component interactions
+- **[Security](docs/SECURITY.md)** - Threat model, encryption, and security practices
+- **[Operations](docs/OPERATIONS.md)** - Environment setup, monitoring, and runbooks
+- **[API Reference](docs/API.md)** - Complete API documentation with examples
+- **[Demo Guide](docs/DEMO.md)** - Step-by-step demonstration scenarios
+- **[Troubleshooting](docs/TROUBLESHOOTING.md)** - Common issues and solutions
+
+## 🎬 Demo
+
+### Quick Demo Script
+
+```bash
+# 1) Seed demo data
+pnpm demo:seed
+
+# 2) Open a PR (simulates GitHub webhook)
+pnpm demo:open --repo octocat/Hello-World --pr 42 --branch feature/demo
+
+# 3) Check the dashboard - you'll see:
+#    - New preview deployment
+#    - Health check auto-created
+#    - Slack notification (if configured)
+
+# 4) Close the PR
+pnpm demo:close --repo octocat/Hello-World --pr 42
+
+# 5) View analytics and health metrics
+```
+
+### Guided Demo Mode
+
+Enable demo mode for guided demonstrations:
+
+```bash
+# Set demo mode in .env
+echo "DEMO_MODE=1" >> .env
+echo "USE_MOCK_PROVIDER=1" >> .env
+echo "DISABLE_SLACK=1" >> .env
+
+# Start the application
+pnpm dev
+
+# Visit /demo for guided steps
+open http://localhost:3000/demo
+```
+
+### CLI Demo
+
+```bash
+# Build and install CLI
+pnpm --filter @opshub/cli build
+pnpm link -w
+
+# Login and run demo
+opshub login --email owner@demo.local
+opshub demo reset
+opshub demo open-pr
+opshub demo degrade
+opshub demo recover
+opshub demo close-pr
+```
+
+### Screenshots
+
+See [docs/screenshots/](docs/screenshots/) for automated UI screenshots.
+
+## 🛠️ Development
 
 ### Project Structure
 
 ```
 ├── apps/
-│   ├── api/                 # NestJS API server
-│   │   ├── src/
-│   │   │   ├── auth/        # Authentication & RBAC
-│   │   │   ├── users/       # User management
-│   │   │   ├── orgs/        # Organization management
-│   │   │   ├── projects/    # Project management
-│   │   │   ├── audit/       # Audit logging
-│   │   │   └── webhooks/    # Webhook handlers
-│   │   └── prisma/          # Database schema & migrations
-│   └── web/                 # Next.js web application
-│       └── src/
-│           ├── app/         # App Router pages
-│           ├── components/  # React components
-│           └── lib/         # Utilities & API client
+│   ├── web/          # Next.js frontend
+│   └── api/          # NestJS backend
 ├── packages/
-│   └── types/               # Shared TypeScript types
-└── docker-compose.yml       # PostgreSQL & Redis services
+│   ├── types/        # Shared TypeScript types
+│   └── cli/          # Command-line interface
+├── docs/             # Documentation
+├── scripts/          # Demo and utility scripts
+└── deploy/           # Deployment configurations
 ```
 
-## API Endpoints
+### Key Scripts
 
-### Authentication
-- `POST /auth/github` - Redirect to GitHub OAuth
-- `GET /auth/github/callback` - OAuth callback
-- `POST /auth/logout` - Logout user
+```bash
+# Development
+pnpm dev              # Start all services
+pnpm build            # Build all packages
+pnpm test             # Run all tests
+pnpm test:e2e         # Run Playwright E2E tests
+pnpm test:k6          # Run k6 load tests
 
-### User Management
-- `GET /me` - Get current user profile
+# Demo
+pnpm demo:seed        # Seed demo data
+pnpm demo:open        # Simulate PR opened
+pnpm demo:close       # Simulate PR closed
+pnpm demo:screens     # Generate screenshots
 
-### Organizations
-- `GET /orgs` - List user's organizations
-- `POST /orgs` - Create new organization
+# CLI
+pnpm --filter @opshub/cli build  # Build CLI
+pnpm link -w                     # Link CLI globally
+opshub --help                    # Show CLI help
 
-### Projects
-- `GET /projects/:id` - Get project details
-- `POST /orgs/:orgId/projects` - Create project (requires MAINTAINER+ role)
+# Database
+pnpm db:migrate       # Run migrations
+pnpm db:seed          # Seed database
+```
 
-### Webhooks
-- `POST /webhooks/github` - GitHub webhook endpoint
-
-## Database Schema
-
-The application uses the following main entities:
-
-- **User** - GitHub user information
-- **Organization** - Groups of users and projects
-- **OrgMember** - User membership in organizations with roles
-- **Project** - GitHub repository links
-- **WebhookEvent** - Incoming webhook events
-- **AuditLog** - Action tracking and audit trail
-
-## Role-Based Access Control
-
-- **OWNER** - Full access to organization and all projects
-- **MAINTAINER** - Can create projects and manage most settings
-- **DEVELOPER** - Can view and work with projects
-- **VIEWER** - Read-only access to projects
-
-## Next Steps
-
-This is Day 1-2 implementation. Future features will include:
-
-- Environment management and secret rotation
-- Preview deployment automation
-- Health monitoring and alerting
-- Slack notifications
-- Advanced RBAC with project-level permissions
-- OpenTelemetry observability
-
-## Security Considerations
-
-### Development Environment
-- **Default credentials** are used for local development only
-- **Change passwords** in `docker-compose.override.yml` for any shared environment
-- **Never commit** `.env` or `docker-compose.override.yml` files
-
-### Production Deployment
-- Use **strong, unique passwords** for all services
-- Enable **SSL/TLS** for database connections
-- Use **secrets management** (e.g., Docker Secrets, Kubernetes Secrets)
-- Regularly **rotate credentials** and API keys
-- Monitor **audit logs** for suspicious activity
+## 🔧 Configuration
 
 ### Environment Variables
-```bash
-# Generate secure passwords
-openssl rand -base64 32  # For POSTGRES_PASSWORD
-openssl rand -base64 32  # For JWT_SECRET
-openssl rand -base64 32  # For GITHUB_WEBHOOK_SECRET
-```
 
-## Contributing
+See [deploy/env.example](deploy/env.example) for complete configuration options.
+
+### Required Variables
+
+- `DATABASE_URL` - PostgreSQL connection string
+- `REDIS_URL` - Redis connection string
+- `JWT_SECRET` - JWT signing secret
+- `ENCRYPTION_KEY_BASE64` - 32-byte base64 encryption key
+- `GITHUB_CLIENT_ID` - GitHub OAuth client ID
+- `GITHUB_CLIENT_SECRET` - GitHub OAuth client secret
+
+### Optional Variables
+
+- `ALLOW_TEST_LOGIN` - Enable test login (development only)
+- `DISABLE_SLACK` - Disable Slack notifications (testing)
+- `USE_MOCK_PROVIDER` - Use mock provider (testing)
+
+## 🤝 Contributing
 
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
-4. Add tests if applicable
+4. Add tests for new functionality
 5. Submit a pull request
 
-## License
+## 📄 License
 
-All rights reserved.
+MIT License - see [LICENSE](LICENSE) for details.
+
+## 🙏 Acknowledgments
+
+Built with:
+- [Next.js](https://nextjs.org/) - React framework
+- [NestJS](https://nestjs.com/) - Node.js framework
+- [Prisma](https://prisma.io/) - Database ORM
+- [BullMQ](https://bullmq.io/) - Queue processing
+- [Playwright](https://playwright.dev/) - E2E testing
+- [k6](https://k6.io/) - Load testing
+
+---
+
+**Ready to deploy?** Check out the [Demo Guide](docs/DEMO.md) for a complete walkthrough! 🚀

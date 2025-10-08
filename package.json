@@ -9,10 +9,19 @@
   ],
   "scripts": {
     "dev": "concurrently \"docker-compose up -d postgres redis\" \"turbo run dev\"",
+    "dev:ci": "concurrently -k -p [{name}] -n api,web -c blue,magenta \"pnpm --filter @opshub/api start:dev:ci\" \"pnpm --filter @opshub/web start:dev:ci\"",
     "build": "turbo run build",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
+    "test:e2e": "pnpm --filter @opshub/web test:e2e",
+    "test:k6": "k6 run tests/k6/smoke.js",
+    "demo:seed": "node --env-file=.env scripts/demo/seed-demo.mjs",
+    "demo:open": "node --env-file=.env scripts/demo/open-pr.mjs",
+    "demo:close": "node --env-file=.env scripts/demo/close-pr.mjs",
+    "demo:screens": "playwright test scripts/demo/screenshot.spec.ts --reporter=line",
+    "release": "standard-version",
+    "release:tag": "git push --follow-tags origin main",
     "clean": "turbo run clean",
     "db:generate": "cd apps/api && npx prisma generate",
     "db:push": "cd apps/api && npx prisma db push",
@@ -26,7 +35,10 @@
     "@types/node": "^20.10.0",
     "turbo": "^1.11.0",
     "typescript": "^5.3.0",
-    "concurrently": "^8.2.2"
+    "concurrently": "^8.2.2",
+    "wait-on": "^7.0.1",
+    "k6": "^0.50.0",
+    "standard-version": "^9.5.0"
   },
   "engines": {
     "node": ">=18.0.0"

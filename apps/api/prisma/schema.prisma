@@ -19,6 +19,7 @@ model User {
   createdAt  DateTime @default(now())
   memberships OrgMember[]
   auditLogs  AuditLog[] @relation("AuditUser")
+  createdEnvVars EnvVar[] @relation("EnvVarCreator")
 }
 
 model Organization {
@@ -60,6 +61,11 @@ model Project {
   providerConfig ProviderConfig?
   deployments   PreviewDeployment[]
   notifications NotificationChannel[]
+  environments  Environment[]
+  secretPolicies SecretPolicy[]
+  healthChecks  HealthCheck[]
+  deployEvents  DeployEvent[]
+  dailyDeployStats DailyDeployStat[]
 }
 
 model WebhookEvent {
@@ -142,4 +148,175 @@ model NotificationChannel {
   slackChannel  String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+}
+
+enum EnvironmentType {
+  PREVIEW
+  STAGING
+  PRODUCTION
+}
+
+model Environment {
+  id        String          @id @default(cuid())
+  project   Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId String
+  type      EnvironmentType
+  name      String          // e.g. "Preview", "Staging", "Production"
+  createdAt DateTime        @default(now())
+  vars      EnvVar[]
+  healthChecks HealthCheck[]
+  @@unique([projectId, type])
+}
+
+model EnvVar {
+  id          String     @id @default(cuid())
+  environment Environment @relation(fields: [environmentId], references: [id], onDelete: Cascade)
+  environmentId String
+  key         String
+  // Encrypted value (AES-256-GCM)
+  valueCiphertext Bytes
+  valueIv         Bytes
+  valueTag        Bytes
+  version     Int        @default(1)
+  createdAt   DateTime   @default(now())
+  rotatedAt   DateTime?
+  createdById String?
+  createdBy   User?      @relation("EnvVarCreator", fields: [createdById], references: [id])
+  // optional metadata (e.g., "managed:true", hints)
+  meta        Json?
+  @@unique([environmentId, key, version])
+  @@index([environmentId, key])
+}
+
+model SecretPolicy {
+  id            String   @id @default(cuid())
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId     String
+  keyPattern    String   // e.g. "^API_KEY_|^SECRET_"
+  rotateEveryDays Int
+  lastEvaluatedAt DateTime?
+  createdAt     DateTime @default(now())
+}
+
+enum RbacAction {
+  ENV_READ
+  ENV_WRITE
+  ENV_ROTATE
+}
+
+enum CheckStatus {
+  OK
+  DEGRADED
+}
+
+model HealthCheck {
+  id             String        @id @default(cuid())
+  project        Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId      String
+  environment    Environment?  @relation(fields: [environmentId], references: [id], onDelete: SetNull)
+  environmentId  String?
+  name           String
+  url            String
+  method         String        @default("GET")
+  headersJson    Json?
+  expectedMin    Int           @default(200) // inclusive
+  expectedMax    Int           @default(399) // inclusive
+  responseContains String?     // optional body substring check
+  intervalSec    Int           @default(60)
+  timeoutMs      Int           @default(5000)
+  failureThreshold  Int        @default(3)   // # consecutive failures to declare DEGRADED
+  recoveryThreshold Int        @default(2)   // # consecutive successes to declare OK
+  alertCooldownMin Int         @default(30)  // suppress duplicate alerts during cooldown
+  enabled        Boolean       @default(true)
+  lastStatus     CheckStatus?
+  lastLatencyMs  Int?
+  lastCheckedAt  DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  samples        HealthSample[]
+  alerts         AlertEvent[]
+  @@index([projectId])
+}
+
+model HealthSample {
+  id            String      @id @default(cuid())
+  healthCheck   HealthCheck @relation(fields: [healthCheckId], references: [id], onDelete: Cascade)
+  healthCheckId String
+  statusCode    Int?
+  ok            Boolean
+  latencyMs     Int?
+  error         String?
+  createdAt     DateTime    @default(now())
+  @@index([healthCheckId, createdAt])
+}
+
+enum AlertType {
+  DEGRADED
+  RECOVERED
+}
+
+enum DeployStage {
+  CREATE_REQUESTED
+  CREATE_STARTED
+  PROVIDER_BUILDING
+  READY
+  ERROR
+  TEARDOWN_REQUESTED
+  TEARDOWN_DONE
+}
+
+enum DeployErrorReason {
+  MISSING_PROVIDER_CONFIG
+  PROVIDER_TIMEOUT
+  PROVIDER_ERROR
+  WEBHOOK_IGNORED
+  UNKNOWN
+}
+
+model AlertEvent {
+  id            String      @id @default(cuid())
+  healthCheck   HealthCheck @relation(fields: [healthCheckId], references: [id], onDelete: Cascade)
+  healthCheckId String
+  type          AlertType
+  message       String?
+  createdAt     DateTime    @default(now())
+}
+
+model DeployEvent {
+  id         String       @id @default(cuid())
+  project    Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId  String
+  prNumber   Int
+  branch     String
+  provider   Provider
+  attemptId  String       // uuid per create attempt
+  stage      DeployStage
+  errorReason DeployErrorReason?
+  message    String?
+  statusCode Int?
+  durationMs Int?         // optional for stages that have a duration
+  metadata   Json?
+  createdAt  DateTime     @default(now())
+  @@index([projectId, createdAt])
+  @@index([projectId, prNumber, attemptId])
+}
+
+model DailyDeployStat {
+  id            String    @id @default(cuid())
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId     String
+  day           DateTime  // normalized to 00:00 UTC
+  createAttempts Int      @default(0)
+  createSuccess  Int      @default(0)
+  createError    Int      @default(0)
+  successRate    Float    @default(0) // 0..1
+  p50CreateMs    Int?
+  p95CreateMs    Int?
+  p99CreateMs    Int?
+  meanCreateMs   Int?
+  errorByReason  Json?    // { "PROVIDER_TIMEOUT": 3, ... }
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  @@unique([projectId, day])
+  @@index([projectId, day])
 }

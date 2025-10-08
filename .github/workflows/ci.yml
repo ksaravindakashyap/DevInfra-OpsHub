@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: opshub
+        ports: [ "5432:5432" ]
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+      redis:
+        image: redis:7
+        ports: [ "6379:6379" ]
+        options: >-
+          --health-cmd="redis-cli ping || exit 1"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/opshub
+      REDIS_URL: redis://localhost:6379
+      API_BASE_URL: http://localhost:4000
+      WEB_BASE_URL: http://localhost:3000
+      JWT_SECRET: ci_jwt_dummy
+      TEST_JWT_SECRET: ci_jwt_dummy
+      ALLOW_TEST_LOGIN: "1"
+      DISABLE_SLACK: "1"
+      USE_MOCK_PROVIDER: "1"
+      ENCRYPTION_KEY_BASE64: dGhpc2lzMzJieXRlc2VjcmV0a2V5dGhpc2lzMzJieXRl
+      GITHUB_CLIENT_ID: dummy
+      GITHUB_CLIENT_SECRET: dummy
+      GITHUB_WEBHOOK_SECRET: dummy
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with: { version: 9 }
+
+      - name: Use Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Prisma migrate
+        run: |
+          pnpm --filter @opshub/api prisma migrate deploy
+          pnpm --filter @opshub/api prisma generate
+          pnpm --filter @opshub/api prisma db seed
+
+      - name: Lint & typecheck
+        run: pnpm -w run lint && pnpm -w run typecheck
+
+      - name: Build
+        run: pnpm -w run build
+
+      - name: Start servers
+        run: pnpm -w run dev:ci &
+      - name: Wait for servers
+        run: npx wait-on http://localhost:4000/healthz http://localhost:3000
+
+      - name: Run unit tests
+        run: pnpm -w run test
+
+      - name: Run Playwright E2E
+        run: pnpm --filter @opshub/web exec playwright install --with-deps && pnpm -w run test:e2e
+
+      - name: Run k6 smoke (optional)
+        run: pnpm -w run test:k6 || echo "k6 optional smoke skipped"
